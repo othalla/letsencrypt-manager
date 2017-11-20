@@ -1,7 +1,7 @@
 #!/bin/sh 
 # USE CERTBOT TO REQUEST NEW CERTIFICATES
 # AND COPY THEM INTO NGINX SSL DIR
-# NGINX RESTART IS NEW CERTIF RETRIEVED
+# RESTART NGINX IF NEW CERTIF RETRIEVED
 
 # VARS
 SITES="deluge nextcloud"          # CURRENT WEBSITES
@@ -13,7 +13,6 @@ CERTBOT_BIN="/usr/local/bin/certbot"
 LETSENCRYPT_CFG_DIR="/usr/local/etc/letsencrypt/live"
 NGX_SSL_DIR="/usr/local/etc/nginx/ssl"
 CERT_FILES="cert.pem chain.pem fullchain.pem privkey.pem"
-NGX_RELOAD_NEEDED=0
 
 newCerts() {
   SITE="$1"
@@ -35,6 +34,7 @@ renewCerts() {
 
 copyCerts() {
   SITE="$1"
+  NGX_RELOAD_NEEDED=0
   LE_NEW_CERT_DIR="$LETSENCRYPT_CFG_DIR/$SITE.$DOMAIN_NAME/live/$DOMAIN_NAME"
   NGX_SSL_SITE_DIR="$NGX_SSL_DIR/$SITE.$DOMAIN_NAME"
   if [ ! -d "$NGX_SSL_SITE_DIR" ]; then
@@ -53,11 +53,16 @@ copyCerts() {
         echo "Failed to copy $file"
         return 1
       }
+      NGX_RELOAD_NEEDED=1
     fi
   done
+  if [ "$NGX_NEED_RELOAD" == "1" ]; then
+    ngx_reload || return 1
+  fi
 }
 
 ngx_reload() {
+  echo "Reloading nginx"
   $NGX_BIN reload || {
     echo "Failed to reload nginx"
     return 1
@@ -86,18 +91,13 @@ newCertsAndInstall() {
 }
 
 certsRenewAndInstall() {
-  NGX_NEED_RELOAD=0
   for site in $SITES
   do
     renew $site || {
       echo "Failed to renew and install new certs fir $site"
       return 1
     }
-    NGX_NEED_RELOAD=1
   done
-  if [ "$NGX_NEED_RELOAD" == "1" ]; then
-    ngx_reload || return 1
-  fi
 }
 
 case $1 in
